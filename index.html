@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TelForensics AI — Forensic CDR Analysis Platform</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body { font-family: 'Syne', sans-serif; background: #050b14; color: #e2eaf5; overflow: hidden; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #0a1525; }
+::-webkit-scrollbar-thumb { background: #00d4ff33; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #00d4ff66; }
+
+/* ─── LAYOUT ─── */
+.app { display: flex; height: 100vh; }
+.sidebar { width: 230px; min-width: 230px; background: #040c18; border-right: 1px solid #0d2035; display: flex; flex-direction: column; }
+.sidebar-logo { padding: 22px 18px 18px; border-bottom: 1px solid #0d2035; }
+.logo-row { display: flex; align-items: center; gap: 11px; }
+.logo-box { width: 38px; height: 38px; background: linear-gradient(135deg,#00d4ff18,#7b2fbe18); border: 1px solid #00d4ff44; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.logo-name { font-size: 14px; font-weight: 800; color: #00d4ff; letter-spacing: 0.5px; }
+.logo-sub { font-size: 9px; color: #2a5a7a; font-family: 'Space Mono', monospace; letter-spacing: 2px; margin-top: 1px; }
+.nav { padding: 14px 10px; flex: 1; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; cursor: pointer; font-size: 11.5px; font-weight: 700; color: #3a6a8a; transition: all 0.18s; letter-spacing: 0.5px; border: 1px solid transparent; }
+.nav-item:hover { background: #0a1a2e; color: #7ab8e0; }
+.nav-item.active { background: #00d4ff0e; color: #00d4ff; border-color: #00d4ff1a; }
+.nav-ico { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.sidebar-status { padding: 14px 18px; border-top: 1px solid #0d2035; }
+.status-row { display: flex; align-items: center; gap: 7px; font-size: 10px; color: #3a6a8a; font-family: 'Space Mono', monospace; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #00c896; box-shadow: 0 0 8px #00c89688; animation: pulse 2s infinite; flex-shrink: 0; }
+.dot.red { background: #ff4b4b; box-shadow: 0 0 8px #ff4b4b88; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.35} }
+.status-file { font-size: 9px; color: #1e4060; font-family: 'Space Mono', monospace; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ─── MAIN ─── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.topbar { padding: 14px 26px; background: #040c18; border-bottom: 1px solid #0d2035; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.topbar-left h1 { font-size: 19px; font-weight: 800; color: #e2eaf5; }
+.topbar-left p { font-size: 10px; color: #2a5a7a; font-family: 'Space Mono', monospace; letter-spacing: 0.5px; margin-top: 2px; }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.api-status { text-align: right; font-size: 10px; font-family: 'Space Mono', monospace; }
+.api-ok { color: #00c896; }
+.api-err { color: #ff4b4b; }
+.api-host { color: #2a5a7a; font-size: 9px; margin-top: 2px; }
+.upload-btn { display: flex; align-items: center; gap: 7px; padding: 9px 18px; background: #00d4ff12; border: 1px solid #00d4ff44; border-radius: 9px; color: #00d4ff; font-size: 11px; font-weight: 800; cursor: pointer; letter-spacing: 0.5px; transition: all 0.18s; font-family: 'Syne', sans-serif; white-space: nowrap; }
+.upload-btn:hover { background: #00d4ff22; box-shadow: 0 0 16px #00d4ff22; }
+.content { flex: 1; overflow-y: auto; padding: 22px 26px; }
+
+/* ─── CARDS & GRID ─── */
+.stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 18px; }
+.stat-card { background: #060e1c; border: 1px solid #0d2035; border-radius: 12px; padding: 16px 18px; border-top: 2px solid var(--ac); }
+.stat-label { font-size: 9.5px; color: #2a5a7a; letter-spacing: 1.5px; font-family: 'Space Mono', monospace; margin-bottom: 8px; text-transform: uppercase; }
+.stat-val { font-size: 30px; font-weight: 800; color: var(--ac); font-family: 'Space Mono', monospace; line-height: 1; }
+.stat-sub { font-size: 10px; color: #2a5a7a; margin-top: 5px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.card { background: #060e1c; border: 1px solid #0d2035; border-radius: 12px; padding: 18px 20px; }
+.card-ttl { font-size: 10px; font-weight: 700; color: #5a8aaa; letter-spacing: 1.2px; margin-bottom: 14px; font-family: 'Space Mono', monospace; text-transform: uppercase; }
+.full { grid-column: 1/-1; }
+
+/* ─── TABLE ─── */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { text-align: left; font-size: 9px; color: #2a5a7a; padding: 6px 10px; border-bottom: 1px solid #0d2035; font-family: 'Space Mono', monospace; letter-spacing: 0.8px; text-transform: uppercase; }
+.tbl td { padding: 9px 10px; font-size: 11px; border-bottom: 1px solid #091520; vertical-align: middle; }
+.tbl tr:hover td { background: #091520; }
+.mono { font-family: 'Space Mono', monospace; font-size: 10px; }
+
+/* ─── BADGE ─── */
+.badge { display: inline-flex; align-items: center; justify-content: center; padding: 2px 9px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; font-family: 'Space Mono', monospace; white-space: nowrap; }
+.b-hi { background: #ff4b4b15; color: #ff4b4b; border: 1px solid #ff4b4b44; }
+.b-md { background: #ffb80015; color: #ffb800; border: 1px solid #ffb80044; }
+.b-lo { background: #00c89615; color: #00c896; border: 1px solid #00c89644; }
+
+/* ─── SCORE BAR ─── */
+.sbar { display: flex; align-items: center; gap: 8px; }
+.sbar-bg { flex: 1; height: 5px; background: #0d2035; border-radius: 3px; overflow: hidden; min-width: 60px; }
+.sbar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+.sbar-n { font-size: 11px; font-weight: 700; font-family: 'Space Mono', monospace; min-width: 22px; text-align: right; }
+
+/* ─── HOURLY CHART ─── */
+.hchart { display: flex; align-items: flex-end; gap: 3px; height: 110px; padding-top: 8px; }
+.hcol { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 4px; }
+.hbar { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; cursor: pointer; transition: filter .15s; }
+.hbar:hover { filter: brightness(1.4); }
+.hlbl { font-size: 7.5px; color: #2a5a7a; font-family: 'Space Mono', monospace; }
+
+/* ─── LINE CHART ─── */
+.lchart { position: relative; height: 85px; }
+.lchart svg { width: 100%; height: 100%; }
+
+/* ─── NETWORK GRAPH ─── */
+.grap-wrap { background: #030a12; border-radius: 10px; overflow: hidden; position: relative; }
+.grap-wrap svg { display: block; width: 100%; }
+.g-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+.g-leg-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #2a5a7a; }
+.g-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+/* ─── CHAT ─── */
+.chat-shell { display: flex; flex-direction: column; height: calc(100vh - 64px); }
+.quick-bar { padding: 10px 18px; background: #040c18; border-bottom: 1px solid #0d2035; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; flex-shrink: 0; }
+.quick-lbl { font-size: 9px; color: #2a5a7a; font-family: 'Space Mono', monospace; letter-spacing: 1px; }
+.qbtn { padding: 4px 11px; background: #091520; border: 1px solid #0d2035; border-radius: 20px; font-size: 10px; color: #5a8aaa; cursor: pointer; transition: all .18s; font-family: 'Syne', sans-serif; white-space: nowrap; }
+.qbtn:hover { border-color: #00d4ff44; color: #00d4ff; background: #00d4ff08; }
+.msgs { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.msg-row { display: flex; gap: 10px; }
+.msg-row.usr { flex-direction: row-reverse; }
+.av { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.av.bot { background: #00d4ff0e; border: 1px solid #00d4ff2a; }
+.av.usr { background: #7b2fbe0e; border: 1px solid #7b2fbe2a; }
+.bubble { background: #091a2e; border: 1px solid #0d2035; border-radius: 12px; padding: 11px 15px; font-size: 12px; line-height: 1.65; color: #b8d4ec; max-width: 78%; }
+.msg-row.usr .bubble { background: #0d1a30; border-color: #7b2fbe33; }
+.bubble b { color: #e2eaf5; }
+.res-box { margin-top: 11px; background: #091520; border: 1px solid #0d2035; border-radius: 9px; overflow: hidden; }
+.res-hdr { padding: 8px 12px; background: #060e1c; border-bottom: 1px solid #0d2035; font-size: 9.5px; font-family: 'Space Mono', monospace; color: #2a5a7a; letter-spacing: 1px; }
+.res-body { padding: 12px; }
+.rtbl { width: 100%; border-collapse: collapse; }
+.rtbl th { font-size: 9px; color: #2a5a7a; padding: 4px 8px; border-bottom: 1px solid #0d2035; font-family: 'Space Mono', monospace; text-align: left; letter-spacing: 0.5px; }
+.rtbl td { font-size: 10.5px; padding: 6px 8px; border-bottom: 1px solid #091520; color: #c8ddef; }
+.typing { display: flex; gap: 5px; padding: 4px 2px; }
+.typing span { width: 6px; height: 6px; background: #00d4ff; border-radius: 50%; animation: bounce 1.1s infinite; }
+.typing span:nth-child(2){animation-delay:.22s}.typing span:nth-child(3){animation-delay:.44s}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
+.chat-inp-row { padding: 14px 18px; border-top: 1px solid #0d2035; display: flex; gap: 10px; background: #040c18; flex-shrink: 0; }
+.cinp { flex: 1; background: #091520; border: 1px solid #0d2035; border-radius: 10px; padding: 11px 15px; color: #e2eaf5; font-size: 12.5px; font-family: 'Syne', sans-serif; outline: none; transition: border-color .2s; }
+.cinp:focus { border-color: #00d4ff44; }
+.cinp::placeholder { color: #1e4060; }
+.sbtn { width: 44px; height: 44px; background: #00d4ff15; border: 1px solid #00d4ff44; border-radius: 10px; color: #00d4ff; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .18s; flex-shrink: 0; }
+.sbtn:hover { background: #00d4ff28; box-shadow: 0 0 14px #00d4ff22; }
+.sbtn:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ─── SUSPICION PAGE ─── */
+.sus-card { background: #060e1c; border: 1px solid #0d2035; border-radius: 10px; padding: 14px 18px; cursor: pointer; transition: border-color .18s; margin-bottom: 8px; }
+.sus-card:hover { border-color: #00d4ff22; }
+.sus-card.open { border-color: #00d4ff44; background: #071525; }
+.sus-hdr { display: flex; align-items: center; gap: 10px; }
+.sus-num { font-size: 12.5px; font-weight: 700; color: #c8ddef; font-family: 'Space Mono', monospace; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sus-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid #0d2035; }
+.flag-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8aa8c4; padding: 5px 9px; background: #091520; border-radius: 5px; margin-bottom: 5px; }
+
+/* ─── UPLOAD PAGE ─── */
+.dropzone { border: 2px dashed #0d2035; border-radius: 12px; padding: 44px 20px; text-align: center; cursor: pointer; transition: all .25s; }
+.dropzone:hover, .dropzone.drag { border-color: #00d4ff55; background: #00d4ff06; }
+.dz-icon { font-size: 42px; margin-bottom: 14px; }
+.dz-title { font-size: 16px; font-weight: 700; color: #c8ddef; margin-bottom: 6px; }
+.dz-sub { font-size: 11px; color: #2a5a7a; }
+
+/* ─── SPINNER ─── */
+.spin { width: 15px; height: 15px; border: 2px solid #00d4ff22; border-top-color: #00d4ff; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─── TOAST ─── */
+.toast { position: fixed; bottom: 22px; right: 22px; background: #060e1c; border: 1px solid #00d4ff44; border-radius: 10px; padding: 12px 18px; font-size: 12px; color: #00d4ff; z-index: 9999; animation: slideup .3s ease; font-family: 'Space Mono', monospace; box-shadow: 0 8px 30px #000a; }
+.toast.err { border-color: #ff4b4b44; color: #ff4b4b; }
+@keyframes slideup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* ─── NUMBER DETAIL MODAL ─── */
+.modal-bg { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: #060e1c; border: 1px solid #0d2035; border-radius: 16px; padding: 28px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.modal-ttl { font-size: 16px; font-weight: 800; color: #e2eaf5; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+.modal-close { cursor: pointer; color: #2a5a7a; font-size: 20px; line-height: 1; }
+.modal-close:hover { color: #e2eaf5; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── CONFIG ─────────────────────────────────────────────────────────────────
+const API = "http://127.0.0.1:8000";
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+const rc = s => s >= 60 ? "#ff4b4b" : s >= 30 ? "#ffb800" : "#00c896";
+const rl = s => s >= 60 ? "HIGH" : s >= 30 ? "MEDIUM" : "LOW";
+const rb = s => s >= 60 ? "b-hi" : s >= 30 ? "b-md" : "b-lo";
+
+function ScoreBar({ score, width = 120 }) {
+  return (
+    <div className="sbar" style={{width}}>
+      <div className="sbar-bg">
+        <div className="sbar-fill" style={{width:`${score}%`, background: rc(score)}}/>
+      </div>
+      <span className="sbar-n" style={{color: rc(score)}}>{score}</span>
+    </div>
+  );
+}
+
+function Toast({ msg, err, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, []);
+  return <div className={`toast ${err?'err':''}`}>{msg}</div>;
+}
+
+// ─── HOURLY CHART ────────────────────────────────────────────────────────────
+function HourlyChart({ data }) {
+  if (!data) return null;
+  const vals = Array.from({length:24},(_,i) => data[String(i)] || 0);
+  const max = Math.max(...vals, 1);
+  return (
+    <div>
+      <div className="hchart">
+        {vals.map((v,h) => {
+          const night = h >= 22 || h <= 5;
+          return (
+            <div key={h} className="hcol">
+              <div className="hbar" title={`${h}:00 — ${v} calls`}
+                style={{height:`${(v/max)*100}%`, minHeight: v>0?3:0,
+                  background: night ? '#ff4b4b77' : '#00d4ff44',
+                  border: `1px solid ${night?'#ff4b4b55':'#00d4ff33'}`}}/>
+              <div className="hlbl">{h%6===0?h:''}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{display:'flex',gap:12,marginTop:9,fontSize:10,color:'#2a5a7a'}}>
+        <span><span style={{color:'#ff4b4b'}}>■</span> Night calls (10PM–5AM)</span>
+        <span><span style={{color:'#00d4ff'}}>■</span> Day calls</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── DAILY TREND ─────────────────────────────────────────────────────────────
+function DailyLine({ data }) {
+  if (!data?.length) return null;
+  const W=500, H=80, P=6;
+  const max = Math.max(...data.map(d=>d.calls), 1);
+  const pts = data.map((d,i) => ({
+    x: P + (i/(data.length-1||1)) * (W-2*P),
+    y: H - P - (d.calls/max)*(H-2*P)
+  }));
+  const path = pts.map((p,i)=>`${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area = `${path} L${pts[pts.length-1].x},${H} L${pts[0].x},${H} Z`;
+  return (
+    <div className="lchart">
+      <svg viewBox={`0 0 ${W} ${H}`}>
+        <defs>
+          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#00d4ff" stopOpacity=".28"/>
+            <stop offset="100%" stopColor="#00d4ff" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#ag)"/>
+        <path d={path} stroke="#00d4ff" strokeWidth="1.8" fill="none" strokeLinejoin="round"/>
+        {pts.filter((_,i)=>i===0||i===pts.length-1).map((p,i)=>(
+          <circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#00d4ff"/>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ─── NETWORK GRAPH (force-directed SVG) ─────────────────────────────────────
+// function NetworkGraph({ nodes, edges }) {
+//   const [pos, setPos] = useState({});
+//   const [tip, setTip] = useState(null);
+//   const posR = useRef({}), velR = useRef({});
+//   const W=760, H=440;
+
+//   useEffect(() => {
+//     if (!nodes?.length) return;
+//     const p={}, v={};
+//     nodes.forEach((n,i) => {
+//       const a=(i/nodes.length)*2*Math.PI, r=140+Math.random()*70;
+//       p[n.id]={x:W/2+Math.cos(a)*r, y:H/2+Math.sin(a)*r};
+//       v[n.id]={x:0,y:0};
+//     });
+//     posR.current=p; velR.current=v; setPos({...p});
+//     let frame=0;
+//     const tick = () => {
+//       if(frame++>220) return;
+//       const pp=posR.current, vv=velR.current;
+//       const alpha=Math.max(.01,.28*Math.exp(-frame*.014));
+//       nodes.forEach(a => nodes.forEach(b => {
+//         if(a.id===b.id) return;
+//         const dx=pp[a.id].x-pp[b.id].x, dy=pp[a.id].y-pp[b.id].y;
+//         const d=Math.sqrt(dx*dx+dy*dy)||1, f=(2200/(d*d))*alpha;
+//         vv[a.id].x+=(dx/d)*f; vv[a.id].y+=(dy/d)*f;
+//       }));
+//       edges.forEach(e => {
+//         if(!pp[e.source]||!pp[e.target]) return;
+//         const dx=pp[e.target].x-pp[e.source].x, dy=pp[e.target].y-pp[e.source].y;
+//         const d=Math.sqrt(dx*dx+dy*dy)||1, s=(d-90)*.014*alpha;
+//         vv[e.source].x+=(dx/d)*s; vv[e.source].y+=(dy/d)*s;
+//         vv[e.target].x-=(dx/d)*s; vv[e.target].y-=(dy/d)*s;
+//       });
+//       nodes.forEach(n => {
+//         vv[n.id].x+=(W/2-pp[n.id].x)*.003*alpha;
+//         vv[n.id].y+=(H/2-pp[n.id].y)*.003*alpha;
+//         vv[n.id].x*=.78; vv[n.id].y*=.78;
+//         pp[n.id].x=Math.max(24,Math.min(W-24,pp[n.id].x+vv[n.id].x));
+//         pp[n.id].y=Math.max(24,Math.min(H-24,pp[n.id].y+vv[n.id].y));
+//       });
+//       setPos({...pp});
+//       requestAnimationFrame(tick);
+//     };
+//     requestAnimationFrame(tick);
+//   }, [nodes, edges]);
+
+//   const nr = n => Math.max(10,Math.min(26, 7+n.calls/12));
+//   const gi = s => s>=60?0:s>=30?1:2;
+//   const gc = s => s>=60?"#ff4b4b":s>=30?"#ffb800":"#00c896";
+
+//   return (
+//     <div className="grap-wrap" style={{height:440}}>
+//       <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'100%'}}>
+//         <defs>
+//           {["#ff4b4b","#ffb800","#00c896"].map((c,i)=>(
+//             <radialGradient key={i} id={`rg${i}`} cx="50%" cy="50%" r="50%">
+//               <stop offset="0%" stopColor={c} stopOpacity=".9"/>
+//               <stop offset="100%" stopColor={c} stopOpacity=".35"/>
+//             </radialGradient>
+//           ))}
+//           <filter id="gl"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+//         </defs>
+//         {edges.map((e,i)=>{
+//           if(!pos[e.source]||!pos[e.target]) return null;
+//           return <line key={i}
+//             x1={pos[e.source].x} y1={pos[e.source].y}
+//             x2={pos[e.target].x} y2={pos[e.target].y}
+//             stroke="#1e3a5f" strokeWidth={Math.min(3.5, e.weight*.28)} strokeOpacity=".6"/>;
+//         })}
+//         {nodes.map(n=>{
+//           if(!pos[n.id]) return null;
+//           const {x,y}=pos[n.id], r=nr(n), col=gc(n.score);
+//           return (
+//             <g key={n.id} style={{cursor:'pointer'}}
+//               onMouseEnter={()=>setTip({...n,x,y})}
+//               onMouseLeave={()=>setTip(null)}>
+//               <circle cx={x} cy={y} r={r+6} fill={col} fillOpacity=".07"/>
+//               <circle cx={x} cy={y} r={r} fill={`url(#rg${gi(n.score)})`} stroke={col} strokeWidth="1.8"
+//                 filter={n.score>=60?"url(#gl)":"none"}/>
+//               <text x={x} y={y+r+13} textAnchor="middle" fontSize="8.5" fill="#6a9aba" fontFamily="Space Mono">{n.id.slice(-10)}</text>
+//             </g>
+//           );
+//         })}
+//         {tip && (() => {
+//           const tx=Math.min(tip.x+14, W-170), ty=Math.max(tip.y-62, 4);
+//           return (
+//             <g>
+//               <rect x={tx} y={ty} width={160} height={64} rx={7} fill="#060e1c" stroke="#0d2035" strokeWidth="1"/>
+//               <text x={tx+10} y={ty+18} fill="#00d4ff" fontSize="9.5" fontFamily="Space Mono">{tip.id.slice(-14)}</text>
+//               <text x={tx+10} y={ty+34} fill="#5a8aaa" fontSize="9" fontFamily="Space Mono">Calls: {tip.calls}</text>
+//               <text x={tx+10} y={ty+50} fill={gc(tip.score)} fontSize="9" fontFamily="Space Mono">Score: {tip.score} · {rl(tip.score)} RISK</text>
+//             </g>
+//           );
+//         })()}
+//       </svg>
+//       <div className="g-legend">
+//         {[["#ff4b4b","HIGH RISK (≥60)"],["#ffb800","MEDIUM (30–59)"],["#00c896","LOW (<30)"]].map(([c,l])=>(
+//           <div key={l} className="g-leg-item"><div className="g-dot" style={{background:c}}/>{l}</div>
+//         ))}
+//         <span style={{marginLeft:'auto',fontSize:10,color:'#1e4060',fontStyle:'italic'}}>Hover nodes · Edge = call volume</span>
+//       </div>
+//     </div>
+//   );
+// }
+
+function NetworkGraph({ nodes, edges }) {
+  const ref = React.useRef();
+
+  useEffect(() => {
+    if (!nodes?.length) return;
+
+    const width = 760;
+    const height = 440;
+
+    const svg = d3.select(ref.current);
+    svg.selectAll("*").remove();
+
+    const g = svg.append("g");
+
+    // Zoom
+    svg.call(
+      d3.zoom().scaleExtent([0.5, 5]).on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      })
+    );
+
+    const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(edges).id(d => d.id).distance(120))
+      .force("charge", d3.forceManyBody().strength(-250))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collision", d3.forceCollide().radius(35));
+
+    const link = g.append("g")
+      .selectAll("line")
+      .data(edges)
+      .enter()
+      .append("line")
+      .attr("stroke", "#1e3a5f")
+      .attr("stroke-width", d => Math.min(3, d.weight));
+
+    const node = g.append("g")
+      .selectAll("circle")
+      .data(nodes)
+      .enter()
+      .append("circle")
+      .attr("r", d => 8 + d.total_calls / 20)
+      .attr("fill", d => d.suspicion_score >= 60 ? "#ff4b4b" :
+                         d.suspicion_score >= 30 ? "#ffb800" : "#00c896")
+      .call(d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended)
+      );
+
+    const label = g.append("g")
+      .selectAll("text")
+      .data(nodes)
+      .enter()
+      .append("text")
+      .text(d => d.id.slice(-6))
+      .attr("font-size", "10px")
+      .attr("fill", "#8aa8c4");
+
+    simulation.on("tick", () => {
+      link
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+      node
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y);
+
+      label
+        .attr("x", d => d.x + 10)
+        .attr("y", d => d.y + 3);
+    });
+
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+
+  }, [nodes, edges]);
+
+  return <svg ref={ref} width="100%" height="440"></svg>;
+}
+// ─── CHAT RESULT WIDGET ───────────────────────────────────────────────────────
+function ChatResult({ res }) {
+  if (!res) return null;
+  const { type, data } = res;
+
+  if (type === "top_callers") return (
+    <div className="res-box">
+      <div className="res-hdr">TOP CALLERS — CALL VOLUME ANALYSIS</div>
+      <div className="res-body" style={{padding:0}}>
+        <table className="rtbl">
+          <thead><tr><th>#</th><th>NUMBER</th><th>CALLS</th><th>RISK</th><th>SCORE</th></tr></thead>
+          <tbody>{(data||[]).map((r,i)=>(
+            <tr key={r.number}>
+              <td style={{color:'#2a5a7a',fontFamily:'Space Mono'}}>{i+1}</td>
+              <td className="mono" style={{color:'#00d4ff'}}>{r.number}</td>
+              <td style={{fontWeight:700}}>{r.calls || r.outgoing_calls}</td>
+              <td><span className={`badge ${rb(r.score || r.suspicion_score)}`}>{rl(r.score || r.suspicion_score)}</span></td>
+              <td><ScoreBar score={r.score || r.suspicion_score} width={100}/></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  if (type === "suspicious_numbers" || type === "suspicious") return (
+    <div className="res-box">
+      <div className="res-hdr">SUSPICION RANKINGS — AI BEHAVIORAL ANALYSIS</div>
+      <div className="res-body" style={{padding:0}}>
+        <table className="rtbl">
+          <thead><tr><th>NUMBER</th><th>SCORE</th><th>RISK</th><th>TOP ANOMALY</th></tr></thead>
+          <tbody>{(Array.isArray(data)?data:Object.entries(data||{}).map(([n,v])=>({number:n,...v}))).slice(0,10).map(r=>(
+            <tr key={r.number}>
+              <td className="mono" style={{color:'#00d4ff'}}>{r.number}</td>
+              <td><ScoreBar score={r.score || r.total_score} width={110}/></td>
+              <td><span className={`badge ${rb(r.score || r.total_score)}`}>{rl(r.score || r.total_score)}</span></td>
+              <td style={{fontSize:10,color:'#5a8aaa',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {(r.flags||[])[0] || '—'}
+              </td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  if (type === "summary") return (
+    <div className="res-box">
+      <div className="res-hdr">DATASET OVERVIEW</div>
+      <div className="res-body">
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {[
+            ["TOTAL CALLS", data.total_calls, "#00d4ff"],
+            ["UNIQUE NUMBERS", data.unique_numbers, "#7b2fbe"],
+            ["TOTAL HOURS", data.total_duration_hours || data.total_hours, "#00c896"],
+            ["AVG DURATION", `${data.avg_duration_seconds || data.avg_duration}s`, "#ffb800"],
+            ["DATE RANGE", data.date_range_days ? `${data.date_range_days} days` : data.date_range, "#8aa8c4"],
+            ["CALL TYPES", Object.entries(data.call_types||{}).map(([k,v])=>`${k}:${v}`).join(', '), "#00d4ff"],
+          ].map(([l,v,c])=>(
+            <div key={l} style={{background:'#091520',borderRadius:7,padding:'9px 12px'}}>
+              <div style={{fontSize:9,color:'#2a5a7a',fontFamily:'Space Mono',letterSpacing:1}}>{l}</div>
+              <div style={{fontSize:14,fontWeight:700,color:c,fontFamily:'Space Mono',marginTop:3}}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (type === "hourly") return (
+    <div className="res-box">
+      <div className="res-hdr">HOURLY CALL DISTRIBUTION</div>
+      <div className="res-body"><HourlyChart data={data}/></div>
+    </div>
+  );
+
+  if (type === "network_graph" || type === "network") return (
+    <div className="res-box">
+      <div className="res-hdr">COMMUNICATION NETWORK GRAPH</div>
+      <div className="res-body" style={{padding:'12px 8px'}}>
+        <NetworkGraph nodes={(data||{}).nodes||[]} edges={(data||{}).edges||[]}/>
+      </div>
+    </div>
+  );
+
+  if (type === "suspicious_numbers" || type === "night_calls") return (
+    <div className="res-box">
+      <div className="res-hdr">NIGHT-HOUR CALL ANALYSIS (10PM–5AM)</div>
+      <div className="res-body"><HourlyChart data={data}/></div>
+    </div>
+  );
+
+  if (type === "frequent_pairs") return (
+    <div className="res-box">
+      <div className="res-hdr">FREQUENT COMMUNICATION PAIRS</div>
+      <div className="res-body" style={{padding:0}}>
+        <table className="rtbl">
+          <thead><tr><th>CALLER</th><th>RECEIVER</th><th>CALLS</th></tr></thead>
+          <tbody>{(data||[]).map((p,i)=>(
+            <tr key={i}>
+              <td className="mono" style={{color:'#00d4ff'}}>{p.caller_number}</td>
+              <td className="mono" style={{color:'#7b2fbe'}}>{p.receiver_number}</td>
+              <td style={{fontWeight:700}}>{p.call_count}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  if (type === "number_detail") return (
+    <div className="res-box">
+      <div className="res-hdr">NUMBER DETAIL ANALYSIS</div>
+      <div className="res-body">
+        {data && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {[
+              ["TOTAL CALLS", data.total_calls],
+              ["OUTGOING", data.outgoing_calls],
+              ["INCOMING", data.incoming_calls],
+              ["UNIQUE CONTACTS", data.unique_contacts],
+            ].map(([l,v])=>(
+              <div key={l} style={{background:'#091520',borderRadius:6,padding:'8px 12px'}}>
+                <div style={{fontSize:9,color:'#2a5a7a',fontFamily:'Space Mono'}}>{l}</div>
+                <div style={{fontSize:16,fontWeight:700,color:'#00d4ff',fontFamily:'Space Mono'}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {data?.suspicion_score && (
+          <div style={{marginTop:10,padding:10,background:'#091520',borderRadius:7,border:`1px solid ${rc(data.suspicion_score.total_score)}44`}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+              <span style={{fontSize:28,fontWeight:800,color:rc(data.suspicion_score.total_score),fontFamily:'Space Mono'}}>{data.suspicion_score.total_score}</span>
+              <div>
+                <div style={{fontSize:9,color:'#2a5a7a',fontFamily:'Space Mono'}}>SUSPICION SCORE</div>
+                <span className={`badge ${rb(data.suspicion_score.total_score)}`}>{rl(data.suspicion_score.total_score)} RISK</span>
+              </div>
+            </div>
+            {(data.suspicion_score.flags||[]).map((f,i)=>(
+              <div key={i} style={{fontSize:11,color:'#8aa8c4',padding:'3px 0',display:'flex',gap:6}}>
+                <span style={{color:'#ffb800'}}>⚠</span>{f}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (type === "suspicion_score") return (
+    <div className="res-box">
+      <div className="res-hdr">SUSPICION SCORE — {res.number}</div>
+      <div className="res-body">
+        <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:12,padding:12,background:'#091520',borderRadius:8,border:`1px solid ${rc(data.total_score)}44`}}>
+          <div style={{fontSize:42,fontWeight:800,color:rc(data.total_score),fontFamily:'Space Mono',lineHeight:1}}>{data.total_score}</div>
+          <div>
+            <div style={{fontSize:10,color:'#2a5a7a',fontFamily:'Space Mono',marginBottom:4}}>/ 100 SUSPICION SCORE</div>
+            <span className={`badge ${rb(data.total_score)}`} style={{fontSize:11}}>{rl(data.total_score)} RISK</span>
+          </div>
+        </div>
+        <div style={{fontSize:10,color:'#5a8aaa',fontWeight:700,marginBottom:8,fontFamily:'Space Mono'}}>DETECTED ANOMALIES:</div>
+        {(data.flags||[]).length ? data.flags.map((f,i)=>(
+          <div key={i} style={{display:'flex',gap:8,alignItems:'flex-start',fontSize:11.5,color:'#c8ddef',padding:'5px 9px',background:'#091520',borderRadius:5,marginBottom:5}}>
+            <span style={{color:'#ffb800',flexShrink:0}}>⚠</span>{f}
+          </div>
+        )) : <div style={{fontSize:11,color:'#2a5a7a'}}>No significant anomalies detected.</div>}
+      </div>
+    </div>
+  );
+
+  return null;
+}
+
+// ─── MAIN APP ────────────────────────────────────────────────────────────────
+function App() {
+  const [page, setPage] = useState("dashboard");
+  const [apiOk, setApiOk] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [fileName, setFileName] = useState("No file loaded");
+  const [toast, setToast] = useState(null);
+
+  // Dashboard data
+  const [summary, setSummary] = useState(null);
+  const [topCallers, setTopCallers] = useState([]);
+  const [suspicious, setSuspicious] = useState([]);
+  const [hourly, setHourly] = useState(null);
+  const [daily, setDaily] = useState([]);
+  const [pairs, setPairs] = useState([]);
+  const [network, setNetwork] = useState({nodes:[],edges:[]});
+
+  // Chat
+  const [msgs, setMsgs] = useState([{
+    id:1, role:"assistant",
+    text:"👋 Welcome to TelForensics AI! Backend is connected at localhost:8000.\n\nUpload your CDR file (Excel/CSV) using the button above, then ask me anything about your data.",
+    res: null
+  }]);
+  const [input, setInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const msgEnd = useRef(null);
+
+  // Suspicion
+  const [openSus, setOpenSus] = useState(null);
+  const [isDrag, setIsDrag] = useState(false);
+  const fileRef = useRef(null);
+
+  const showToast = (msg, err=false) => { setToast({msg,err}); };
+
+  // ── Check API health ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const r = await fetch(`${API}/health`, {signal: AbortSignal.timeout(3000)});
+        const d = await r.json();
+        setApiOk(true);
+        if (d.data_loaded) {
+          setDataLoaded(true);
+          loadAllData();
+        }
+      } catch { setApiOk(false); }
+    };
+    check();
+    const interval = setInterval(check, 8000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => { msgEnd.current?.scrollIntoView({behavior:'smooth'}); }, [msgs]);
+
+  // ── Load all dashboard data ──────────────────────────────────────────────────
+  const loadAllData = async () => {
+    try {
+      const [sum, top, sus, hr, dl, pr, net] = await Promise.all([
+        fetch(`${API}/summary`).then(r=>r.json()),
+        fetch(`${API}/top-callers?n=10`).then(r=>r.json()),
+        fetch(`${API}/suspicious?limit=25`).then(r=>r.json()),
+        fetch(`${API}/hourly`).then(r=>r.json()),
+        fetch(`${API}/daily-trend`).then(r=>r.json()),
+        fetch(`${API}/frequent-pairs?n=10`).then(r=>r.json()),
+        fetch(`${API}/network-graph`).then(r=>r.json()),
+      ]);
+      setSummary(sum); setTopCallers(top); setSuspicious(sus);
+      setHourly(hr); setDaily(dl); setPairs(pr); setNetwork(net);
+    } catch(e) { showToast("Failed to load data from backend", true); }
+  };
+
+  // ── Upload file ─────────────────────────────────────────────────────────────
+  const handleFile = async (file) => {
+    if (!file) return;
+    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+      showToast("Only .xlsx, .xls, .csv files are accepted", true); return;
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      showToast("⏳ Uploading & processing...");
+      const r = await fetch(`${API}/upload`, {method:"POST", body:fd});
+      const d = await r.json();
+      if (!r.ok) { showToast(d.detail || "Upload failed", true); return; }
+      setDataLoaded(true);
+      setFileName(file.name);
+      showToast(`✓ Loaded ${d.total_records} records · ${d.unique_numbers} numbers`);
+      await loadAllData();
+      setMsgs(prev => [...prev, {
+        id: Date.now(), role:"assistant",
+        text: `✅ File **${file.name}** processed successfully!\n\n📊 ${d.total_records} CDR records loaded · ${d.unique_numbers} unique numbers · Date range: ${d.date_range?.start?.slice(0,10)} to ${d.date_range?.end?.slice(0,10)}\n\nAsk me anything about your data!`,
+        res: null
+      }]);
+    } catch { showToast("Upload failed — is the backend running?", true); }
+  };
+
+  // ── Chat send ───────────────────────────────────────────────────────────────
+  const sendMsg = async () => {
+    if (!input.trim() || chatLoading) return;
+    const txt = input.trim(); setInput(""); setChatLoading(true);
+    setMsgs(prev => [...prev, {id:Date.now(), role:"user", text:txt, res:null}]);
+    try {
+      const r = await fetch(`${API}/chat`, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({message: txt})
+      });
+      const d = await r.json();
+      setMsgs(prev => [...prev, {
+        id: Date.now()+1, role:"assistant",
+        text: d.message || "Query processed.",
+        res: d
+      }]);
+    } catch {
+      setMsgs(prev => [...prev, {id:Date.now()+1, role:"assistant", text:"⚠ Backend error. Is the FastAPI server running on port 8000?", res:null}]);
+    }
+    setChatLoading(false);
+  };
+
+  const nav = [
+    {id:"dashboard", ico:"⬛", lbl:"DASHBOARD"},
+    {id:"chat",      ico:"💬", lbl:"AI CHATBOT"},
+    {id:"suspicious",ico:"⚠",  lbl:"SUSPICION SCORES"},
+    {id:"network",   ico:"🕸", lbl:"NETWORK GRAPH"},
+    {id:"upload",    ico:"📁", lbl:"UPLOAD DATA"},
+  ];
+
+  const pageMeta = {
+    dashboard:  ["Dashboard Overview",       "CDR ANALYTICS PLATFORM"],
+    chat:       ["AI Forensic Chatbot",      "NATURAL LANGUAGE QUERY ENGINE"],
+    suspicious: ["Suspicion Score Engine",   "AI BEHAVIORAL THREAT RANKING"],
+    network:    ["Communication Network",    "ENTITY RELATIONSHIP GRAPH"],
+    upload:     ["Upload CDR Data",          "EXCEL / CSV IMPORT"],
+  };
+
+  const highRisk = suspicious.filter(s=>s.score>=60);
+  const medRisk  = suspicious.filter(s=>s.score>=30&&s.score<60);
+
+  return (
+    <div className="app">
+      {/* SIDEBAR */}
+      <div className="sidebar">
+        <div className="sidebar-logo">
+          <div className="logo-row">
+            <div className="logo-box">🛡</div>
+            <div>
+              <div className="logo-name">TelForensics</div>
+              <div className="logo-sub">AI · v1.0</div>
+            </div>
+          </div>
+        </div>
+        <nav className="nav">
+          {nav.map(n=>(
+            <div key={n.id} className={`nav-item ${page===n.id?'active':''}`} onClick={()=>setPage(n.id)}>
+              <span className="nav-ico">{n.ico}</span>{n.lbl}
+            </div>
+          ))}
+        </nav>
+        <div className="sidebar-status">
+          <div className="status-row">
+            <div className={`dot ${apiOk?'':'red'}`}/>
+            {apiOk ? "BACKEND CONNECTED" : "BACKEND OFFLINE"}
+          </div>
+          <div className="status-file">
+            {dataLoaded ? `✓ ${fileName}` : "No dataset loaded"}
+          </div>
+          {summary && <div className="status-file" style={{color:'#1e5070'}}>{summary.total_calls} records · {summary.unique_numbers} numbers</div>}
+        </div>
+      </div>
+
+      {/* MAIN */}
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-left">
+            <h1>{pageMeta[page][0]}</h1>
+            <p>{pageMeta[page][1]}</p>
+          </div>
+          <div className="topbar-right">
+            <div className="api-status">
+              <div className={apiOk?"api-ok":"api-err"}>{apiOk?"● API ONLINE":"● API OFFLINE"}</div>
+              <div className="api-host">localhost:8000</div>
+            </div>
+            <button className="upload-btn" onClick={()=>setPage('upload')}>⬆ UPLOAD CDR</button>
+          </div>
+        </div>
+
+        {/* ─── DASHBOARD ─── */}
+        {page==="dashboard" && (
+          <div className="content">
+            <div className="stat-grid">
+              {[
+                {lbl:"TOTAL CALLS",      val: summary?.total_calls?.toLocaleString() ?? "—",   sub:"records analysed",        ac:"#00d4ff"},
+                {lbl:"UNIQUE NUMBERS",   val: summary?.unique_numbers ?? "—",                   sub:"entities tracked",        ac:"#7b2fbe"},
+                {lbl:"HIGH RISK",        val: highRisk.length || "—",                           sub:"numbers flagged",         ac:"#ff4b4b"},
+                {lbl:"ANALYSIS HOURS",   val: summary?.total_duration_hours ?? summary?.total_hours ?? "—", sub:"of call activity", ac:"#00c896"},
+              ].map(s=>(
+                <div key={s.lbl} className="stat-card" style={{"--ac":s.ac}}>
+                  <div className="stat-label">{s.lbl}</div>
+                  <div className="stat-val">{s.val}</div>
+                  <div className="stat-sub">{s.sub}</div>
+                </div>
+              ))}
+            </div>
+            {!dataLoaded ? (
+              <div style={{padding:60,textAlign:'center',color:'#2a5a7a'}}>
+                <div style={{fontSize:48,marginBottom:16}}>📂</div>
+                <div style={{fontSize:16,fontWeight:700,marginBottom:8,color:'#5a8aaa'}}>No Dataset Loaded</div>
+                <div style={{fontSize:12,marginBottom:20}}>Upload a CDR file to begin forensic analysis</div>
+                <button className="upload-btn" style={{margin:'0 auto'}} onClick={()=>setPage('upload')}>⬆ Upload CDR File</button>
+              </div>
+            ) : (
+              <div className="grid2">
+                <div className="card">
+                  <div className="card-ttl">HOURLY CALL DISTRIBUTION</div>
+                  <HourlyChart data={hourly}/>
+                </div>
+                <div className="card">
+                  <div className="card-ttl">DAILY CALL TREND</div>
+                  <DailyLine data={daily}/>
+                  {summary && <div style={{marginTop:10,fontSize:10,color:'#2a5a7a'}}>Date range: {summary.date_range}</div>}
+                </div>
+                <div className="card">
+                  <div className="card-ttl">TOP CALLERS BY VOLUME</div>
+                  <table className="tbl">
+                    <thead><tr><th>NUMBER</th><th>CALLS</th><th>RISK</th></tr></thead>
+                    <tbody>{topCallers.slice(0,7).map(c=>(
+                      <tr key={c.number} style={{cursor:'pointer'}} onClick={()=>setPage('suspicious')}>
+                        <td className="mono" style={{color:'#00d4ff'}}>{c.number}</td>
+                        <td style={{fontWeight:700}}>{c.outgoing_calls}</td>
+                        <td><span className={`badge ${rb(c.suspicion_score)}`}>{rl(c.suspicion_score)}</span></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+                <div className="card">
+                  <div className="card-ttl">SUSPICION LEADERBOARD</div>
+                  {suspicious.slice(0,7).map((s,i)=>(
+                    <div key={s.number} style={{display:'flex',alignItems:'center',gap:9,padding:'7px 0',borderBottom:'1px solid #091520',cursor:'pointer'}} onClick={()=>{setPage('suspicious');setOpenSus(s.number);}}>
+                      <span style={{color:'#1e4060',fontFamily:'Space Mono',fontSize:10,minWidth:18}}>{i+1}</span>
+                      <span className="mono" style={{color:'#00d4ff',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.number}</span>
+                      <ScoreBar score={s.score} width={100}/>
+                    </div>
+                  ))}
+                </div>
+                <div className="card full">
+                  <div className="card-ttl">FREQUENT COMMUNICATION PAIRS</div>
+                  <table className="tbl">
+                    <thead><tr><th>#</th><th>CALLER</th><th>RECEIVER</th><th>CALLS</th><th>WEIGHT</th></tr></thead>
+                    <tbody>{pairs.map((p,i)=>(
+                      <tr key={i}>
+                        <td style={{color:'#2a5a7a',fontFamily:'Space Mono'}}>{String(i+1).padStart(2,'0')}</td>
+                        <td className="mono" style={{color:'#00d4ff'}}>{p.caller_number}</td>
+                        <td className="mono" style={{color:'#7b2fbe'}}>{p.receiver_number}</td>
+                        <td style={{fontWeight:700}}>{p.call_count}</td>
+                        <td style={{width:120}}>
+                          <div className="sbar-bg"><div className="sbar-fill" style={{width:`${(p.call_count/(pairs[0]?.call_count||1))*100}%`,background:'#00d4ff44'}}/></div>
+                        </td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── CHAT ─── */}
+        {page==="chat" && (
+          <div className="chat-shell">
+            <div className="quick-bar">
+              <span className="quick-lbl">QUICK:</span>
+              {["Show top callers","Who is suspicious?","Show night calls","Network graph","Daily trend","Frequent pairs","Dataset summary"].map(q=>(
+                <button key={q} className="qbtn" onClick={()=>setInput(q)}>{q}</button>
+              ))}
+            </div>
+            <div className="msgs">
+              {msgs.map(m=>(
+                <div key={m.id} className={`msg-row ${m.role==='user'?'usr':''}`}>
+                  <div className={`av ${m.role==='user'?'usr':'bot'}`}>{m.role==='user'?'👤':'🛡'}</div>
+                  <div style={{maxWidth:'78%'}}>
+                    <div className="bubble" style={{whiteSpace:'pre-wrap'}}>{m.text.replace(/\*\*/g,'')}</div>
+                    {m.res && m.res.type !== "error" && <ChatResult res={m.res}/>}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="msg-row">
+                  <div className="av bot">🛡</div>
+                  <div className="bubble"><div className="typing"><span/><span/><span/></div></div>
+                </div>
+              )}
+              <div ref={msgEnd}/>
+            </div>
+            <div className="chat-inp-row">
+              <input className="cinp" placeholder={dataLoaded ? "Ask about your CDR data... e.g. 'Who has the highest suspicion score?'" : "Upload a CDR file first to start analysis..."} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} disabled={chatLoading}/>
+              <button className="sbtn" onClick={sendMsg} disabled={chatLoading||!input.trim()}>
+                {chatLoading ? <div className="spin"/> : '→'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── SUSPICION SCORES ─── */}
+        {page==="suspicious" && (
+          <div className="content">
+            <div style={{display:'flex',gap:12,marginBottom:18}}>
+              {[
+                ["HIGH RISK",  highRisk.length,           "#ff4b4b", "score ≥ 60"],
+                ["MEDIUM",     medRisk.length,             "#ffb800", "score 30–59"],
+                ["LOW RISK",   suspicious.length-highRisk.length-medRisk.length, "#00c896", "score < 30"],
+                ["TOTAL ANALYSED", suspicious.length,     "#00d4ff", "unique numbers"],
+              ].map(([l,v,c,s])=>(
+                <div key={l} style={{background:'#060e1c',border:`1px solid ${c}22`,borderTop:`2px solid ${c}`,borderRadius:10,padding:'13px 18px',flex:1}}>
+                  <div style={{fontSize:9,color:'#2a5a7a',fontFamily:'Space Mono',letterSpacing:1}}>{l}</div>
+                  <div style={{fontSize:28,fontWeight:800,color:c,fontFamily:'Space Mono'}}>{v}</div>
+                  <div style={{fontSize:9,color:'#2a5a7a'}}>{s}</div>
+                </div>
+              ))}
+            </div>
+            {!dataLoaded ? (
+              <div style={{padding:40,textAlign:'center',color:'#2a5a7a'}}>Upload a CDR file to compute suspicion scores.</div>
+            ) : (
+              suspicious.map(s=>(
+                <div key={s.number} className={`sus-card ${openSus===s.number?'open':''}`} onClick={()=>setOpenSus(openSus===s.number?null:s.number)}>
+                  <div className="sus-hdr">
+                    <div className="sus-num">{s.number}</div>
+                    <ScoreBar score={s.score} width={140}/>
+                    <span className={`badge ${rb(s.score)}`} style={{minWidth:56,textAlign:'center'}}>{rl(s.score)}</span>
+                    <span style={{color:'#2a5a7a',fontSize:12,marginLeft:4}}>{openSus===s.number?'▲':'▼'}</span>
+                  </div>
+                  {openSus===s.number && (
+                    <div className="sus-detail">
+                      {s.flags?.length ? s.flags.map((f,i)=>(
+                        <div key={i} className="flag-item"><span style={{color:'#ffb800'}}>⚠</span>{f}</div>
+                      )) : <div className="flag-item"><span style={{color:'#00c896'}}>✓</span>No significant anomalies detected.</div>}
+                      <button style={{marginTop:10,padding:'6px 14px',background:'#00d4ff0e',border:'1px solid #00d4ff33',borderRadius:7,color:'#00d4ff',fontSize:10.5,cursor:'pointer',fontFamily:'Syne,sans-serif',fontWeight:700}}
+                        onClick={e=>{e.stopPropagation();setInput(`Tell me more about ${s.number}`);setPage('chat');}}>
+                        🔍 Ask AI about this number →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ─── NETWORK GRAPH ─── */}
+        {page==="network" && (
+          <div className="content">
+            <div style={{display:'flex',gap:12,marginBottom:18}}>
+              {[
+                {l:"NODES",       v:network.nodes.length, c:"#00d4ff"},
+                {l:"CONNECTIONS", v:network.edges.length, c:"#7b2fbe"},
+                {l:"HIGH RISK",   v:network.nodes.filter(n=>n.suspicion_score>=60||n.score>=60).length, c:"#ff4b4b"},
+              ].map(({l,v,c})=>(
+                <div key={l} style={{background:'#060e1c',border:`1px solid ${c}22`,borderTop:`2px solid ${c}`,borderRadius:10,padding:'13px 18px',flex:1}}>
+                  <div style={{fontSize:9,color:'#2a5a7a',fontFamily:'Space Mono',letterSpacing:1}}>{l}</div>
+                  <div style={{fontSize:26,fontWeight:800,color:c,fontFamily:'Space Mono'}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            {network.nodes.length ? (
+              <>
+                <div className="card" style={{marginBottom:14}}>
+                  <div className="card-ttl">COMMUNICATION NETWORK — Hover nodes for details</div>
+                  <NetworkGraph nodes={network.nodes.map(n=>({...n,score:n.suspicion_score||n.score}))} edges={network.edges}/>
+                </div>
+                <div className="card">
+                  <div className="card-ttl">TOP CONNECTED ENTITIES</div>
+                  <table className="tbl">
+                    <thead><tr><th>NUMBER</th><th>TOTAL CALLS</th><th>SUSPICION SCORE</th><th>RISK</th></tr></thead>
+                    <tbody>{[...network.nodes].sort((a,b)=>(b.total_calls||b.calls)-(a.total_calls||a.calls)).slice(0,8).map(n=>(
+                      <tr key={n.id}>
+                        <td className="mono" style={{color:'#00d4ff'}}>{n.id}</td>
+                        <td style={{fontWeight:700}}>{n.total_calls||n.calls}</td>
+                        <td><ScoreBar score={n.suspicion_score||n.score} width={110}/></td>
+                        <td><span className={`badge ${rb(n.suspicion_score||n.score)}`}>{rl(n.suspicion_score||n.score)}</span></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div style={{padding:40,textAlign:'center',color:'#2a5a7a'}}>Upload a CDR file to generate the network graph.</div>
+            )}
+          </div>
+        )}
+
+        {/* ─── UPLOAD ─── */}
+        {page==="upload" && (
+          <div className="content">
+            {dataLoaded && (
+              <div style={{background:'#00c89610',border:'1px solid #00c89633',borderRadius:9,padding:'11px 16px',display:'flex',alignItems:'center',gap:9,fontSize:11,color:'#00c896',marginBottom:16,fontFamily:'Space Mono'}}>
+                <span>✓</span><span>Active: <b>{fileName}</b> · {summary?.total_calls} records</span>
+              </div>
+            )}
+            <div className="card" style={{marginBottom:14}}>
+              <div className="card-ttl">UPLOAD NEW CDR FILE</div>
+              <div className={`dropzone ${isDrag?'drag':''}`}
+                onClick={()=>fileRef.current?.click()}
+                onDragOver={e=>{e.preventDefault();setIsDrag(true)}}
+                onDragLeave={()=>setIsDrag(false)}
+                onDrop={e=>{e.preventDefault();setIsDrag(false);handleFile(e.dataTransfer.files[0])}}>
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}} onChange={e=>handleFile(e.target.files[0])}/>
+                <div className="dz-icon">📂</div>
+                <div className="dz-title">Drop your CDR file here or click to browse</div>
+                <div className="dz-sub" style={{marginBottom:12}}>Supports Excel (.xlsx, .xls) and CSV · Any size</div>
+                <div style={{display:'inline-block',padding:'7px 20px',background:'#00d4ff12',border:'1px solid #00d4ff44',borderRadius:7,fontSize:11,color:'#00d4ff',fontWeight:700}}>Browse Files</div>
+              </div>
+            </div>
+            <div className="card" style={{marginBottom:14}}>
+              <div className="card-ttl">REQUIRED / ACCEPTED COLUMNS</div>
+              <table className="tbl">
+                <thead><tr><th>COLUMN NAME</th><th>DATA TYPE</th><th>EXAMPLE VALUE</th><th>REQUIRED</th></tr></thead>
+                <tbody>{[
+                  ["caller_number",   "Text / Phone", "+91-98765-43210",           "✓ YES"],
+                  ["receiver_number", "Text / Phone", "+91-80234-56789",           "✓ YES"],
+                  ["call_datetime",   "DateTime",     "2024-10-01 02:35:00",       "✓ YES"],
+                  ["duration_seconds","Number",       "125",                       "Optional"],
+                  ["call_type",       "Text",         "Voice / SMS",               "Optional"],
+                  ["tower_location",  "Text",         "Hyderabad-Central",         "Optional"],
+                  ["imei",            "Text",         "351234567890123",           "Optional"],
+                ].map(([c,t,e,r])=>(
+                  <tr key={c}>
+                    <td className="mono" style={{color:'#00d4ff'}}>{c}</td>
+                    <td style={{color:'#5a8aaa'}}>{t}</td>
+                    <td className="mono" style={{color:'#2a5a7a'}}>{e}</td>
+                    <td><span className={`badge ${r.includes('YES')?'b-lo':'b-md'}`}>{r}</span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <div className="card">
+              <div className="card-ttl">BACKEND API — RUNNING AT localhost:8000</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {[
+                  {m:"GET",  e:"/health",         d:"Check backend status"},
+                  {m:"POST", e:"/upload",          d:"Upload CDR Excel/CSV file"},
+                  {m:"POST", e:"/chat",            d:"Natural language query"},
+                  {m:"GET",  e:"/top-callers",     d:"Most frequent callers"},
+                  {m:"GET",  e:"/suspicious",      d:"Suspicion score rankings"},
+                  {m:"GET",  e:"/network-graph",   d:"Node-link network data"},
+                  {m:"GET",  e:"/hourly",          d:"Calls by hour distribution"},
+                  {m:"GET",  e:"/daily-trend",     d:"Day-by-day call trend"},
+                  {m:"GET",  e:"/frequent-pairs",  d:"Top caller-receiver pairs"},
+                  {m:"POST", e:"/score",           d:"Score a specific number"},
+                ].map(({m,e,d})=>(
+                  <div key={e} style={{display:'flex',alignItems:'center',gap:10}}>
+                    <span className={`badge ${m==='POST'?'b-hi':'b-lo'}`} style={{minWidth:40}}>{m}</span>
+                    <code style={{fontFamily:'Space Mono',fontSize:10,color:'#00d4ff',flex:1}}>{e}</code>
+                    <span style={{fontSize:10,color:'#2a5a7a'}}>{d}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:14,padding:12,background:'#091520',borderRadius:8}}>
+                <div style={{fontSize:10,color:'#5a8aaa',fontFamily:'Space Mono',marginBottom:6}}>DOCS:</div>
+                <a href="http://127.0.0.1:8000/docs" target="_blank" style={{color:'#00d4ff',fontSize:11,fontFamily:'Space Mono'}}>http://127.0.0.1:8000/docs ↗ (Swagger UI)</a>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {toast && <Toast msg={toast.msg} err={toast.err} onDone={()=>setToast(null)}/>}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
