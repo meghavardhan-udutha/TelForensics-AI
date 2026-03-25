@@ -4,6 +4,7 @@ Run: uvicorn main:app --reload --port 8000
 """
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import tempfile, os
 import analyzer as az
@@ -26,7 +27,7 @@ class NumberRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "TelForensics AI API", "version": "2.0.0"}
+    return FileResponse("index.html")
 
 @app.get("/health")
 def health():
